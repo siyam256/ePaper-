@@ -51,6 +51,9 @@ class ReaderViewModel(context: Context) : ViewModel() {
     private val _pdfName = MutableStateFlow<String?>(null)
     val pdfName: StateFlow<String?> = _pdfName.asStateFlow()
 
+    private val _currentPdfUri = MutableStateFlow<Uri?>(null)
+    val currentPdfUri: StateFlow<Uri?> = _currentPdfUri.asStateFlow()
+
     // --- Gemini Analysis States ---
     private val _isAnalyzing = MutableStateFlow(false)
     val isAnalyzing: StateFlow<Boolean> = _isAnalyzing.asStateFlow()
@@ -86,6 +89,7 @@ class ReaderViewModel(context: Context) : ViewModel() {
         _currentArticle.value = article
         _currentPageIndex.value = 0
         _pdfName.value = null
+        _currentPdfUri.value = null
         navigateTo(Screen.Reader)
     }
 
@@ -93,6 +97,7 @@ class ReaderViewModel(context: Context) : ViewModel() {
         viewModelScope.launch {
             _isExtractingPdf.value = true
             _analysisError.value = null
+            _currentPdfUri.value = uri
             try {
                 val pages = PdfTextExtractor.extractTextFromUri(context, uri)
                 if (pages.isEmpty()) {
@@ -115,6 +120,19 @@ class ReaderViewModel(context: Context) : ViewModel() {
             } finally {
                 _isExtractingPdf.value = false
             }
+        }
+    }
+
+    fun openPdfInSystemViewer(context: Context) {
+        val uri = _currentPdfUri.value ?: return
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/pdf")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("ReaderViewModel", "Failed to open PDF in system viewer", e)
         }
     }
 

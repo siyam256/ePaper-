@@ -1,16 +1,17 @@
 package com.example.ui
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.speech.tts.TextToSpeech
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -19,11 +20,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -31,7 +29,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.GeminiAnalysisResult
-import kotlinx.coroutines.delay
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,6 +39,7 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
     val currentPageIndex by viewModel.currentPageIndex.collectAsState()
     val themePreference by viewModel.readerTheme.collectAsState()
     val fontSizePreference by viewModel.readerFontSize.collectAsState()
+    val currentPdfUri by viewModel.currentPdfUri.collectAsState()
 
     // Gemini Lookup States
     val isAnalyzing by viewModel.isAnalyzing.collectAsState()
@@ -49,6 +47,9 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
     val activeWord by viewModel.activeLookupWord.collectAsState()
     val activeSentence by viewModel.activeLookupSentence.collectAsState()
     val errorMsg by viewModel.analysisError.collectAsState()
+
+    // Manual input query matching the selection
+    var manualSearchQuery by remember { mutableStateOf("") }
 
     // Reading Colors based on Theme
     val themeColors = remember(themePreference) {
@@ -71,6 +72,29 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
                 text = Color(0xFFE3E2E6),
                 primary = Color(0xFFA4C9FE)
             )
+        }
+    }
+
+    // Clipboard listener to automatically perform lookup when user highlights & copies text
+    val clipboardManager = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager }
+    var lastCopiedText by remember { mutableStateOf("") }
+
+    DisposableEffect(context) {
+        val listener = ClipboardManager.OnPrimaryClipChangedListener {
+            val clip = clipboardManager?.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                val text = clip.getItemAt(0).text?.toString()?.trim()
+                if (!text.isNullOrBlank() && text != lastCopiedText) {
+                    lastCopiedText = text
+                    manualSearchQuery = text
+                    // Instantly trigger dictionary lookup on copy event!
+                    viewModel.performWordLookup(text, text)
+                }
+            }
+        }
+        clipboardManager?.addPrimaryClipChangedListener(listener)
+        onDispose {
+            clipboardManager?.removePrimaryClipChangedListener(listener)
         }
     }
 
@@ -120,6 +144,21 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
                     }
                 },
                 actions = {
+                    // Open in system viewer if PDF Uri exists
+                    if (currentPdfUri != null) {
+                        IconButton(
+                            onClick = { viewModel.openPdfInSystemViewer(context) },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInNew,
+                                contentDescription = "Open in System Viewer"
+                            )
+                        }
+                    }
+
                     // Quick Settings toggle
                     var showQuickSettings by remember { mutableStateOf(false) }
                     IconButton(onClick = { showQuickSettings = !showQuickSettings }) {
@@ -221,6 +260,77 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
+                    // Modern selection & manual lookup input block
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        colors = CardDefaults.cardColors(containerColor = themeColors.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = themeColors.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "জেমিনি AI অনুবাদ ও ব্যাখ্যা",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = themeColors.primary
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            OutlinedTextField(
+                                value = manualSearchQuery,
+                                onValueChange = { manualSearchQuery = it },
+                                placeholder = { Text("যেকোনো ইংরেজি শব্দ বা বাক্য পেস্ট করুন...", fontSize = 13.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = themeColors.background,
+                                    unfocusedContainerColor = themeColors.background,
+                                    focusedBorderColor = themeColors.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                ),
+                                trailingIcon = {
+                                    if (manualSearchQuery.isNotEmpty()) {
+                                        IconButton(onClick = {
+                                            viewModel.performWordLookup(manualSearchQuery, manualSearchQuery)
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Search,
+                                                contentDescription = "Search text with Gemini",
+                                                tint = themeColors.primary
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "💡 টিপস: নিচের পৃষ্ঠা থেকে যেকোনো অংশ সিলেক্ট করে 'Copy' করলেই সেটি স্বয়ংক্রিয়ভাবে জেমিনি AI দিয়ে অনুবাদ হয়ে যাবে!",
+                                fontSize = 11.sp,
+                                color = themeColors.text.copy(alpha = 0.7f),
+                                lineHeight = 16.sp
+                                )
+                        }
+                    }
+
+                    // Main selectable PDF page content block
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = themeColors.surface),
@@ -235,15 +345,12 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
                             ReaderPageContent(
                                 pageText = pageText,
                                 fontSize = fontSizePreference,
-                                textColor = themeColors.text,
-                                onWordHeld = { word, sentence ->
-                                    viewModel.performWordLookup(word, sentence)
-                                }
+                                textColor = themeColors.text
                             )
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(180.dp)) // Extra space to scroll past the bottom popup card
+                    Spacer(modifier = Modifier.height(260.dp)) // Extra space to scroll past the bottom popup card
                 }
             }
 
@@ -282,7 +389,7 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                 Icon(
                                     imageVector = Icons.Default.AutoAwesome,
                                     contentDescription = null,
@@ -293,8 +400,10 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
                                 Text(
                                     text = activeWord ?: "",
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 20.sp,
-                                    color = MaterialTheme.colorScheme.primary
+                                    fontSize = 18.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 IconButton(
@@ -393,7 +502,7 @@ fun LookupResultBody(result: GeminiAnalysisResult) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 260.dp)
+            .heightIn(max = 240.dp)
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -474,155 +583,22 @@ fun LookupResultBody(result: GeminiAnalysisResult) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReaderPageContent(
     pageText: String,
     fontSize: Float,
-    textColor: Color,
-    onWordHeld: (word: String, sentence: String) -> Unit
-) {
-    // Split text by lines to construct paragraphs
-    val paragraphs = remember(pageText) {
-        pageText.split("\n").filter { it.trim().isNotEmpty() }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        paragraphs.forEach { paraText ->
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-                verticalArrangement = Arrangement.Center
-            ) {
-                val words = remember(paraText) { paraText.split(" ") }
-                var charOffset = 0
-                
-                words.forEach { rawWord ->
-                    if (rawWord.isNotEmpty()) {
-                        val clean = rawWord.filter { it.isLetterOrDigit() || it == '-' || it == '\'' }
-                        val currentOffset = charOffset
-                        
-                        WordText(
-                            word = rawWord,
-                            cleanWord = clean,
-                            onWordHeld = {
-                                val sentence = getSentenceContainingWord(pageText, rawWord, currentOffset)
-                                onWordHeld(clean, sentence)
-                            },
-                            fontSizeSp = fontSize,
-                            textColor = textColor
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                    charOffset += rawWord.length + 1
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun WordText(
-    word: String,
-    cleanWord: String,
-    onWordHeld: () -> Unit,
-    fontSizeSp: Float,
     textColor: Color
 ) {
-    val haptic = LocalHapticFeedback.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    var progress by remember { mutableStateOf(0f) }
-
-    // When held down, animates progress from 0f to 1f over 2.0 seconds
-    LaunchedEffect(isPressed) {
-        if (isPressed && cleanWord.isNotEmpty()) {
-            val startTime = System.currentTimeMillis()
-            val duration = 2000L // 2 seconds hold duration as requested!
-            while (progress < 1f) {
-                val elapsed = System.currentTimeMillis() - startTime
-                progress = (elapsed.toFloat() / duration).coerceAtMost(1f)
-                if (progress >= 1f) {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onWordHeld()
-                    break
-                }
-                delay(16) // smooth 60fps updates
-            }
-        } else {
-            progress = 0f
-        }
+    SelectionContainer {
+        Text(
+            text = pageText,
+            fontSize = fontSize.sp,
+            fontFamily = FontFamily.Serif,
+            color = textColor,
+            lineHeight = (fontSize * 1.5f).sp,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
-
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(
-                if (progress > 0f) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f + (progress * 0.28f))
-                } else Color.Transparent
-            )
-            .padding(horizontal = 2.dp)
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(bottom = 1.dp)
-        ) {
-            Text(
-                text = word,
-                fontSize = fontSizeSp.sp,
-                fontFamily = FontFamily.Serif,
-                color = textColor
-            )
-            
-            // Render smooth horizontal loading line under the word during active hold
-            if (progress > 0f) {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.5.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Transparent
-                )
-            }
-        }
-    }
-}
-
-/**
- * Strips page-text boundary indexes to retrieve sentence structure.
- */
-fun getSentenceContainingWord(pageText: String, word: String, wordStartIndex: Int): String {
-    if (pageText.isEmpty() || word.isEmpty()) return ""
-    
-    var start = wordStartIndex
-    while (start > 0) {
-        val char = pageText[start - 1]
-        if (char == '.' || char == '!' || char == '?' || char == '\n') {
-            break
-        }
-        start--
-    }
-    
-    var end = wordStartIndex + word.length
-    while (end < pageText.length) {
-        val char = pageText[end]
-        if (char == '.' || char == '!' || char == '?') {
-            end++
-            break
-        }
-        if (char == '\n') {
-            break
-        }
-        end++
-    }
-    
-    val sentence = pageText.substring(start, end).trim()
-    return if (sentence.length > 5) sentence else pageText.take(150)
 }
 
 @Composable
