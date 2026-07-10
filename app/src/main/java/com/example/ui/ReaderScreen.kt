@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.net.Uri
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.data.GeminiAnalysisResult
 import java.util.*
 
@@ -40,6 +42,7 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
     val themePreference by viewModel.readerTheme.collectAsState()
     val fontSizePreference by viewModel.readerFontSize.collectAsState()
     val currentPdfUri by viewModel.currentPdfUri.collectAsState()
+    val isPdfMode = currentPdfUri != null && currentArticle?.pages?.firstOrNull() == "PDF_VIEW"
 
     // Gemini Lookup States
     val isAnalyzing by viewModel.isAnalyzing.collectAsState()
@@ -144,21 +147,6 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
                     }
                 },
                 actions = {
-                    // Open in system viewer if PDF Uri exists
-                    if (currentPdfUri != null) {
-                        IconButton(
-                            onClick = { viewModel.openPdfInSystemViewer(context) },
-                            colors = IconButtonDefaults.iconButtonColors(
-                                contentColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.OpenInNew,
-                                contentDescription = "Open in System Viewer"
-                            )
-                        }
-                    }
-
                     // Quick Settings toggle
                     var showQuickSettings by remember { mutableStateOf(false) }
                     IconButton(onClick = { showQuickSettings = !showQuickSettings }) {
@@ -185,56 +173,58 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
             )
         },
         bottomBar = {
-            // Reader Navigation Bar (Previous / Page X of Y / Next)
-            Surface(
-                color = MaterialTheme.colorScheme.background,
-                tonalElevation = 0.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .navigationBarsPadding(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            if (!isPdfMode) {
+                // Reader Navigation Bar (Previous / Page X of Y / Next)
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    tonalElevation = 0.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    val maxPages = currentArticle?.pages?.size ?: 0
-                    
-                    OutlinedButton(
-                        onClick = { viewModel.prevPage() },
-                        enabled = currentPageIndex > 0,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        shape = RoundedCornerShape(12.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .navigationBarsPadding(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.NavigateBefore, contentDescription = "Prev Page")
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("পূর্বের পৃষ্ঠা", fontSize = 13.sp)
-                    }
+                        val maxPages = currentArticle?.pages?.size ?: 0
+                        
+                        OutlinedButton(
+                            onClick = { viewModel.prevPage() },
+                            enabled = currentPageIndex > 0,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.NavigateBefore, contentDescription = "Prev Page")
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("পূর্বের পৃষ্ঠা", fontSize = 13.sp)
+                        }
 
-                    Text(
-                        text = "পৃষ্ঠা ${currentPageIndex + 1} / $maxPages",
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                        Text(
+                            text = "পৃষ্ঠা ${currentPageIndex + 1} / $maxPages",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
 
-                    OutlinedButton(
-                        onClick = { viewModel.nextPage() },
-                        enabled = currentPageIndex < maxPages - 1,
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("পরবর্তী পৃষ্ঠা", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(imageVector = Icons.Default.NavigateNext, contentDescription = "Next Page")
+                        OutlinedButton(
+                            onClick = { viewModel.nextPage() },
+                            enabled = currentPageIndex < maxPages - 1,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("পরবর্তী পৃষ্ঠা", fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(imageVector = Icons.Default.NavigateNext, contentDescription = "Next Page")
+                        }
                     }
                 }
             }
@@ -248,7 +238,13 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
         ) {
             val pageText = currentArticle?.pages?.getOrNull(currentPageIndex) ?: ""
             
-            if (pageText.isEmpty()) {
+            if (isPdfMode && currentPdfUri != null) {
+                PdfWebViewReader(
+                    pdfUri = currentPdfUri!!,
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else if (pageText.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -675,3 +671,324 @@ data class ReaderColors(
     val text: Color,
     val primary: Color
 )
+
+@Composable
+fun PdfWebViewReader(
+    pdfUri: Uri,
+    viewModel: ReaderViewModel,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    
+    val pdfHtmlTemplate = remember(pdfUri) {
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+          <title>PDF Viewer</title>
+          <!-- Load PDF.js -->
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+          <!-- Load PDF.js CSS for text layer styling -->
+          <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf_viewer.min.css">
+          <style>
+            body {
+              margin: 0;
+              padding: 10px;
+              background-color: #F3F4F9;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+            #viewer-container {
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+              align-items: center;
+              padding-bottom: 240px; /* Leave generous space at the bottom for lookup drawer overlay */
+            }
+            .page-container {
+              position: relative;
+              background-color: white;
+              box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+              border-radius: 8px;
+              overflow: hidden;
+              margin-bottom: 8px;
+            }
+            canvas {
+              display: block;
+              width: 100% !important;
+              height: auto !important;
+            }
+            .textLayer {
+              position: absolute;
+              left: 0;
+              top: 0;
+              right: 0;
+              bottom: 0;
+              overflow: hidden;
+              opacity: 0.35;
+              line-height: 1.0;
+            }
+            .textLayer > span {
+              color: transparent;
+              position: absolute;
+              white-space: pre;
+              cursor: text;
+              transform-origin: 0% 0%;
+            }
+            ::selection {
+              background: rgba(0, 97, 164, 0.3) !important;
+              color: transparent !important;
+            }
+            .loading-banner {
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              font-size: 16px;
+              font-weight: bold;
+              color: #555;
+              background: white;
+              padding: 16px 24px;
+              border-radius: 12px;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+              z-index: 1000;
+              text-align: center;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="loading" class="loading-banner">পিডিএফ ফাইল লোড হচ্ছে...</div>
+          <div id="viewer-container"></div>
+
+          <script>
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+            async function loadStreamedPdf() {
+              const loadingEl = document.getElementById('loading');
+              
+              try {
+                const totalSize = AndroidStream.getPdfSize();
+                if (totalSize === 0) {
+                  loadingEl.innerText = "পিডিএফ ফাইলটি খালি বা পড়া যায়নি।";
+                  return;
+                }
+
+                const chunkSize = 512 * 1024; // 512KB
+                const totalBytes = new Uint8Array(totalSize);
+                let offset = 0;
+
+                while (offset < totalSize) {
+                  const base64Chunk = AndroidStream.getPdfBase64Chunk(offset, chunkSize);
+                  if (!base64Chunk) break;
+                  
+                  const binaryString = window.atob(base64Chunk);
+                  for (let i = 0; i < binaryString.length; i++) {
+                    totalBytes[offset + i] = binaryString.charCodeAt(i);
+                  }
+                  offset += binaryString.length;
+                  
+                  const percent = Math.min(100, Math.round((offset / totalSize) * 100));
+                  loadingEl.innerText = "পিডিএফ লোড হচ্ছে... (" + percent + "%)";
+                }
+
+                loadingEl.innerText = "পৃষ্ঠাগুলো তৈরি করা হচ্ছে...";
+                const loadingTask = pdfjsLib.getDocument({data: totalBytes});
+                
+                loadingTask.promise.then(function(pdf) {
+                  loadingEl.style.display = 'none';
+                  
+                  // Render pages sequentially for performance
+                  let renderPromise = Promise.resolve();
+                  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    renderPromise = renderPromise.then(() => renderPage(pdf, pageNum));
+                  }
+                }, function(error) {
+                  loadingEl.innerText = "পিডিএফ খুলতে ব্যর্থ হয়েছে: " + error.message;
+                });
+
+              } catch (err) {
+                loadingEl.innerText = "ত্রুটি ঘটেছে: " + err.message;
+              }
+            }
+
+            function renderPage(pdf, pageNum) {
+              return pdf.getPage(pageNum).then(function(page) {
+                const scale = 1.5;
+                const viewport = page.getViewport({scale: scale});
+
+                const pageContainer = document.createElement('div');
+                pageContainer.className = 'page-container';
+                pageContainer.style.width = '100%';
+                pageContainer.style.maxWidth = viewport.width + 'px';
+                
+                const aspectRatio = viewport.height / viewport.width;
+                pageContainer.style.aspectRatio = (1 / aspectRatio).toString();
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                const textLayerDiv = document.createElement('div');
+                textLayerDiv.className = 'textLayer';
+
+                pageContainer.appendChild(canvas);
+                pageContainer.appendChild(textLayerDiv);
+                document.getElementById('viewer-container').appendChild(pageContainer);
+
+                const renderContext = {
+                  canvasContext: context,
+                  viewport: viewport
+                };
+                
+                return page.render(renderContext).promise.then(function() {
+                  return page.getTextContent();
+                }).then(function(textContent) {
+                  return pdfjsLib.renderTextLayer({
+                    textContent: textContent,
+                    container: textLayerDiv,
+                    viewport: viewport,
+                    textDivs: []
+                  }).promise;
+                });
+              });
+            }
+
+            // Capture text selection with delay
+            let selectionTimeout = null;
+            document.addEventListener('selectionchange', () => {
+              if (selectionTimeout) clearTimeout(selectionTimeout);
+              
+              selectionTimeout = setTimeout(() => {
+                const selection = window.getSelection();
+                const selectedText = selection.toString().trim();
+                if (selectedText.length > 0) {
+                  let sentenceContext = selectedText;
+                  try {
+                    const anchorNode = selection.anchorNode;
+                    if (anchorNode) {
+                      const parentEl = anchorNode.parentNode;
+                      if (parentEl) {
+                        const fullText = parentEl.innerText || parentEl.textContent;
+                        if (fullText && fullText.length > selectedText.length) {
+                          sentenceContext = fullText;
+                        }
+                      }
+                    }
+                  } catch(e) {}
+                  
+                  if (window.Android) {
+                    window.Android.onTextSelected(selectedText, sentenceContext);
+                  }
+                }
+              }, 1500); // 1.5 - 2 seconds delay
+            });
+
+            // Handle immediate triggers on touch/mouse release
+            function handleSelectionTrigger() {
+              const selection = window.getSelection();
+              const selectedText = selection.toString().trim();
+              if (selectedText.length > 0) {
+                let sentenceContext = selectedText;
+                try {
+                  const anchorNode = selection.anchorNode;
+                  if (anchorNode) {
+                    const parentEl = anchorNode.parentNode;
+                    if (parentEl) {
+                      const fullText = parentEl.innerText || parentEl.textContent;
+                      if (fullText && fullText.length > selectedText.length) {
+                        sentenceContext = fullText;
+                      }
+                    }
+                  }
+                } catch(e) {}
+                
+                if (window.Android) {
+                  window.Android.onTextSelected(selectedText, sentenceContext);
+                }
+              }
+            }
+
+            document.addEventListener('touchend', () => setTimeout(handleSelectionTrigger, 600));
+            document.addEventListener('mouseup', () => setTimeout(handleSelectionTrigger, 600));
+
+            window.onload = function() {
+              loadStreamedPdf();
+            };
+          </script>
+        </body>
+        </html>
+        """.trimIndent()
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            android.webkit.WebView(ctx).apply {
+                settings.javaScriptEnabled = true
+                settings.allowFileAccess = true
+                settings.domStorageEnabled = true
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.setSupportZoom(true)
+                
+                // Add stream javascript interface
+                addJavascriptInterface(object {
+                    @android.webkit.JavascriptInterface
+                    fun getPdfBase64Chunk(offset: Int, limit: Int): String {
+                        return try {
+                            context.contentResolver.openInputStream(pdfUri)?.use { inputStream ->
+                                inputStream.skip(offset.toLong())
+                                val buffer = ByteArray(limit)
+                                val bytesRead = inputStream.read(buffer)
+                                if (bytesRead > 0) {
+                                    val actualBytes = if (bytesRead < limit) buffer.copyOf(bytesRead) else buffer
+                                    android.util.Base64.encodeToString(actualBytes, android.util.Base64.NO_WRAP)
+                                } else {
+                                    ""
+                                }
+                            } ?: ""
+                        } catch (e: Exception) {
+                            android.util.Log.e("PdfStream", "Error reading chunk", e)
+                            ""
+                        }
+                    }
+                    
+                    @android.webkit.JavascriptInterface
+                    fun getPdfSize(): Int {
+                        return try {
+                            var size: Long = 0
+                            context.contentResolver.query(pdfUri, null, null, null, null)?.use { cursor ->
+                                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                if (sizeIndex != -1 && cursor.moveToFirst()) {
+                                    size = cursor.getLong(sizeIndex)
+                                }
+                            }
+                            if (size == 0L) {
+                                context.contentResolver.openInputStream(pdfUri)?.use {
+                                    size = it.available().toLong()
+                                }
+                            }
+                            size.toInt()
+                        } catch (e: Exception) {
+                            android.util.Log.e("PdfStream", "Error getting size", e)
+                            0
+                        }
+                    }
+                }, "AndroidStream")
+
+                // Add text selected javascript interface
+                addJavascriptInterface(object {
+                    @android.webkit.JavascriptInterface
+                    fun onTextSelected(text: String, contextSentence: String) {
+                        viewModel.performWordLookup(text, contextSentence)
+                    }
+                }, "Android")
+
+                // Load inline HTML template content
+                loadDataWithBaseURL("https://mozilla.github.io/pdf.js/", pdfHtmlTemplate, "text/html", "UTF-8", null)
+            }
+        },
+        modifier = modifier
+    )
+}

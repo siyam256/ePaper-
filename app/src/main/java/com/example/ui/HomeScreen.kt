@@ -37,7 +37,6 @@ import com.example.pdf.PreloadedArticles
 fun HomeScreen(viewModel: ReaderViewModel) {
     val context = LocalContext.current
     val currentArticle by viewModel.currentArticle.collectAsState()
-    val isExtracting by viewModel.isExtractingPdf.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
 
     // Activity launcher for picking PDF file
@@ -215,9 +214,7 @@ fun HomeScreen(viewModel: ReaderViewModel) {
                 
                 Card(
                     onClick = {
-                        if (!isExtracting) {
-                            pdfPickerLauncher.launch("application/pdf")
-                        }
+                        pdfPickerLauncher.launch("application/pdf")
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -235,36 +232,26 @@ fun HomeScreen(viewModel: ReaderViewModel) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        if (isExtracting) {
-                            CircularProgressIndicator(modifier = Modifier.size(36.dp))
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "পিডিএফ থেকে টেক্সট বের করা হচ্ছে...",
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.UploadFile,
-                                contentDescription = "Upload PDF",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "ডিভাইস থেকে পিডিএফ (PDF) সিলেক্ট করুন",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "ePaper এর পিডিএফ এখানে সিলেক্ট করে সরাসরি পড়তে পারবেন",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                modifier = Modifier.padding(top = 4.dp),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.UploadFile,
+                            contentDescription = "Upload PDF",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "ডিভাইস থেকে পিডিএফ (PDF) সিলেক্ট করুন",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "ePaper এর পিডিএফ এখানে সিলেক্ট করে সরাসরি পড়তে পারবেন",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(top = 4.dp),
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }

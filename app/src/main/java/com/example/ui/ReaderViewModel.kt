@@ -10,7 +10,6 @@ import com.example.data.GeminiService
 import com.example.data.LookupItem
 import com.example.data.PreferencesManager
 import com.example.pdf.Article
-import com.example.pdf.PdfTextExtractor
 import com.example.pdf.PreloadedArticles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -70,11 +69,6 @@ class ReaderViewModel(context: Context) : ViewModel() {
     private val _analysisError = MutableStateFlow<String?>(null)
     val analysisError: StateFlow<String?> = _analysisError.asStateFlow()
 
-    init {
-        // Automatically initialize PdfTextExtractor
-        PdfTextExtractor.init(context)
-    }
-
     // --- Actions ---
 
     fun navigateTo(screen: Screen) {
@@ -94,33 +88,20 @@ class ReaderViewModel(context: Context) : ViewModel() {
     }
 
     fun loadPdf(context: Context, uri: Uri, fileName: String) {
-        viewModelScope.launch {
-            _isExtractingPdf.value = true
-            _analysisError.value = null
-            _currentPdfUri.value = uri
-            try {
-                val pages = PdfTextExtractor.extractTextFromUri(context, uri)
-                if (pages.isEmpty()) {
-                    _analysisError.value = "পিডিএফ থেকে কোনো টেক্সট পাওয়া যায়নি।"
-                } else {
-                    val newArticle = Article(
-                        title = fileName,
-                        source = "আমার আপলোড করা পিডিএফ",
-                        date = "আজ",
-                        pages = pages
-                    )
-                    _currentArticle.value = newArticle
-                    _currentPageIndex.value = 0
-                    _pdfName.value = fileName
-                    navigateTo(Screen.Reader)
-                }
-            } catch (e: Exception) {
-                Log.e("ReaderViewModel", "Failed to extract PDF", e)
-                _analysisError.value = "পিডিএফ লোড করতে সমস্যা হয়েছে: ${e.localizedMessage}"
-            } finally {
-                _isExtractingPdf.value = false
-            }
-        }
+        _analysisError.value = null
+        _currentPdfUri.value = uri
+        
+        // Build synthetic Article indicating PDF mode
+        val newArticle = Article(
+            title = fileName,
+            source = "আমার আপলোড করা পিডিএফ",
+            date = "আজ",
+            pages = listOf("PDF_VIEW")
+        )
+        _currentArticle.value = newArticle
+        _currentPageIndex.value = 0
+        _pdfName.value = fileName
+        navigateTo(Screen.Reader)
     }
 
     fun openPdfInSystemViewer(context: Context) {
