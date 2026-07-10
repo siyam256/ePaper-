@@ -1,0 +1,6 @@
+{
+  "name": "ePaper Reader",
+  "description": "An elegant English ePaper reader featuring 2-second hold-to-learn powered by Gemini AI with Bengali translations, grammar analysis, and pronunciation guides.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
